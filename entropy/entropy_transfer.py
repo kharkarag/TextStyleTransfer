@@ -37,6 +37,8 @@ class EntropyTransfer:
         self.tokenizer = TweetTokenizer()
         self.lemmatizer = WordNetLemmatizer()
 
+        self.bows = []  # list of bows per doc for gensim
+
     def update_tag_bow(self, tags, n, bow):
         for tag in nltk.ngrams(tags, n):
             self.update_bow(tag, bow)
@@ -51,6 +53,7 @@ class EntropyTransfer:
     def learn_bow(self, filename, filetype=None):
         bow = {}
         for line in parse(filename, filetype):
+            local_bow = {}
             tokens = self.tokenizer.tokenize(line)
             token_tags = [("BEGIN", "BEGIN")] + nltk.pos_tag(tokens) + [("END", "END")]
             for (token, tag) in token_tags:
@@ -59,10 +62,12 @@ class EntropyTransfer:
                 if wn_tag in self.allowed_tags:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
+                self.update_bow(lemma, local_bow)
                 self.update_bow(word, bow)
+
                 tag_word = (tag, lemma)
                 self.update_bow(tag_word, self.tag_word_counts)
-
+            self.bows.append(local_bow)
             tags = list(map(lambda t: t[1], token_tags))
             self.update_tag_bow(tags, 1, self.unigram_tag_counts)
             self.update_tag_bow(tags, 2, self.bigram_tag_counts)
@@ -224,8 +229,9 @@ class EntropyTransfer:
                 source_pos.pop(index)
             else:
                 # random chance to sample from target or ignore tag
+                # Don't sample nouns because that is highly tied to content
                 prob = random.random()
-                if prob < 0.5:
+                if tag != 'n' and prob < 0.5:
                     word = self.tag_word_lm.sample([tag])  # sample from p(w|t)
                     words.append(word)
 
