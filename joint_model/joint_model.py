@@ -3,7 +3,8 @@ from nltk.corpus import wordnet as wn
 from entropy.entropy_transfer import EntropyTransfer
 from langauge_model.language_model import LanguageModel
 from topic_model.lda_model import LDAModel
-from evaluation.eval import calc_stats
+from topic_model.topic_model import TopicModel
+from eval import calc_stats
 from util.file_parsers import parse
 from nltk.tokenize import TweetTokenizer
 from nltk.stem import WordNetLemmatizer
@@ -226,8 +227,8 @@ class JointGenerator:
 
 
 def term_wwl(word, topic):
-    word_synset = wn.synset(word)
-    distances = [word_synset.path_similarity(wn.synset(term)) for term in topic]
+    word_synset = wn.synset(word + '.01')
+    distances = [word_synset.path_similarity(wn.synset(term + '.01')) for term in topic]
     min_index = distances.index(min(distances))
     closest_term, min_distance = topic[min_index], distances[min_index]
     return topic.word_likelihood(closest_term)/(min_distance + 1)
@@ -253,7 +254,9 @@ def generate_joint(doc_length, language_model, topic_model):
         word_distances = []
         for word in language_model.bow:
 #            topic_distance = topic_model.likelihood(word)
-            topic_distance = doc_wwl(gen_doc + word, topic_model)
+            new_doc = gen_doc + [word]
+            print(topic_model.lsi_model[topic_model.dictionary.doc2bow(new_doc)])
+            topic_distance = doc_wwl(new_doc, topic_model.lsi_model[topic_model.dictionary.doc2bow(new_doc)])
             language_likelihood = language_model.smooth_prob(word)
             # N-gram
             # language_likelihood = language_model.smooth_prob([gen_doc[-1], word])
@@ -265,24 +268,30 @@ def generate_joint(doc_length, language_model, topic_model):
     return gen_doc
 
 def main():
-    target_file = "../data/trumpTweets.csv"
+    target_file = "data/trumpTweets.csv"
     filetype = "tweets"
-    test_file = "../data/test_file_right.txt"
+    test_file = "data/test_file_right.txt"
     docs = parse(target_file, filetype)
 
-    entropy_transfer = EntropyTransfer()
-    entropy_transfer.learn_target(docs)
+    entropy_transfer = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
+    entropy_transfer.learn_target(docs[:4000])
     target_lm = entropy_transfer.word_lm
     
-    target_tm = LDAModel(entropy_transfer.bows)
-    lda = target_tm.lda_model
+    print("Training LSI...")
+    target_tm = TopicModel(entropy_transfer.bows)
+    lsi = target_tm.lsi_model
+#    target_tm = LDAModel(entropy_transfer.bows)
+#    lda = target_tm.lda_model
+    print("LSI done")
+    
+    print(lsi.show_topics())
 
     joint_results = []
     
     test_docs = parse(test_file)
     for doc in test_docs:
         tokens = entropy_transfer.tokenizer.tokenize(doc)
-        modified_sentence = generate_joint(len(doc), target_lm, lda)
+        modified_sentence = generate_joint(len(doc), target_lm, target_tm)
         (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
         print_sentence(modified_sentence)
         joint_results.append(modified_sentence)

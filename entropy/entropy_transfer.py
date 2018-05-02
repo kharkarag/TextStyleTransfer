@@ -71,9 +71,10 @@ class EntropyTransfer:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
                 # update bag of words of just lemmas
-                self.update_bow(lemma, doc_bow)
-                # update bag of words of lemma.tag
-                self.update_bow(word, bow)
+                if not (lemma == "BEGIN" or lemma == "END"):
+                    self.update_bow(lemma, doc_bow)
+                    # update bag of words of lemma.tag
+                    self.update_bow(word, bow)
                 # update bag of words of (tag, lemma)
                 tag_word = (tag, lemma)
                 self.update_bow(tag_word, self.tag_word_counts)
@@ -154,7 +155,7 @@ class EntropyTransfer:
         return avg_entropy
 
     def swap_word(self, word):
-        (lemma, tag) = word.split('.')
+        (lemma, tag) = word.split('.', 1)
 
         synonyms = []
         if tag in self.allowed_tags:

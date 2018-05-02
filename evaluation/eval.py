@@ -11,6 +11,7 @@ from util.file_parsers import parse
 import matplotlib.pyplot as plt
 import math
 import nltk
+import numpy as np
 
 
 def lm_similarity(language_model, doc1, doc2):
@@ -26,9 +27,9 @@ def calc_stats(language_model, topic_model, original_sentence, modified_sentence
 
 
 def main():
-    target_file = "../data/trumpTweets.csv" #input("Enter a file to learn the style of: ")
+    target_file = "data/trumpTweets.csv" #input("Enter a file to learn the style of: ")
     filetype = "tweets"  # input("Enter a format of the file <tweets, lyrics>. Leave blank for raw text: ")
-    test_file = "../data/test_file_right.txt" #input("Enter a file to transfer style to: ")
+    test_file = "data/test_file_right.txt" #input("Enter a file to transfer style to: ")
 
     if len(filetype) == 0:
         filetype = None
@@ -73,7 +74,7 @@ def main():
         sentence_structure_results.append((doc, modified_sentence, per_word_ll, log_likelihood, similarity))
 
     # Plot
-    x = range(len(entropy_results))
+    x = np.array(range(len(entropy_results)))
     baseline_ll = list(map(lambda res: res[2], entropy_results))
     entropy_ll = list(map(lambda res: res[3], entropy_results))
     pos_ll = list(map(lambda res: res[3], sentence_structure_results))
@@ -81,18 +82,22 @@ def main():
     entropy_topic_sim = list(map(lambda res: res[4], entropy_results))
     pos_topic_sim = list(map(lambda res: res[4], sentence_structure_results))
 
-    plt.plot(x, baseline_ll, label="Baseline Approach")
-    plt.plot(x, entropy_ll, label="Entropy Approach")
-    plt.plot(x, pos_ll, label="Sentence Structure Approach")
-    plt.legend()
+    w = 0.15
+    ax = plt.subplot(111)
+    ax.bar(x-w, baseline_ll, width=w, color='b', label="Baseline Approach")
+    ax.bar(x, entropy_ll, width=w, color='r', label="Entropy Approach")
+    ax.bar(x+w, pos_ll, width=w, color='g', label="Sentence Structure Approach")
+    ax.legend()
     plt.xlabel("Sentence number")
     plt.ylabel("Per-word Log likelihood")
     plt.xticks(x)
     plt.show()
 
-    plt.plot(x, entropy_topic_sim, label="Entropy Approach")
-    plt.plot(x, pos_topic_sim, label="Sentence Structure Approach")
-    plt.legend()
+    w = 0.2
+    ax = plt.subplot(111)
+    ax.bar(x-w/2, entropy_topic_sim, width=w, color='r', label="Entropy Approach")
+    ax.bar(x+w/2, pos_topic_sim, width=w, color='g', label="Sentence Structure Approach")
+    ax.legend()
     plt.xlabel("Sentence number")
     plt.ylabel("Topic Similarity")
     plt.xticks(x)

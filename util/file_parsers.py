@@ -32,7 +32,7 @@ def parse(filename, filetype=None, bow_file=None, artist_name=None):
 # For parsing this csv format
 # https://www.kaggle.com/austinvernsonger/donaldtrumptweets
 def parse_tweets(filename):
-    f = open(filename)
+    f = open(filename, encoding='UTF-8')
     tweet_texts = []
     for line in f:
         tweet_data = line.split(',')
