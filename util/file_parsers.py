@@ -2,7 +2,10 @@
 This module handles parsing of various file formats
 """
 
-_allowable_types = ["tweets", "lyrics"]
+import re
+
+
+_allowable_types = ["tweets", "lyrics", "tweets2"]
 
 def parse(filename, filetype=None, bow_file=None, artist_name=None):
     """
@@ -18,6 +21,8 @@ def parse(filename, filetype=None, bow_file=None, artist_name=None):
         print("Unsupported file type %s specified. Allowed types are %s".format(type, _allowable_types))
     elif filetype == "tweets":
         return parse_tweets(filename)
+    elif filetype == "tweets2":
+        return parse_tweets2(filename)
     elif filetype == "lyrics":
         if bow_file is None or artist_name is None:
             print("Bag of word file or artist name not specified but lyric parsing requested")
@@ -33,9 +38,30 @@ def parse_tweets(filename):
         tweet_data = line.split(',')
         if len(tweet_data) > 3:
             tweet_text = tweet_data[2]
+            # ignore retweets
+            if tweet_text.startswith("RT"):
+                continue
             tweet_texts.append(tweet_text)
             # TODO: remove urls
     return tweet_texts
+
+# For parsing this csv format
+# https://www.kaggle.com/speckledpingu/RawTwitterFeeds/
+def parse_tweets2(filename):
+    f = open(filename)
+    tweet_texts = []
+    for line in f:
+        tweet_data = line.split(',')
+        # if not a retweet
+        if len(tweet_data) > 5 and tweet_data[4] == "False":
+            tweet_text = tweet_data[5]
+            tweet_text.replace('.', '')
+            tweet_text = re.sub(r'^https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
+
+            tweet_texts.append(tweet_text)
+    return tweet_texts
+
 
 # For parsing text line by line. Assumes empty line in a doc separator unless otherwise specified
 def parse_raw(filename, doc_separator='\n'):
