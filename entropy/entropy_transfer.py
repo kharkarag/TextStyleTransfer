@@ -16,7 +16,12 @@ import random
 
 class EntropyTransfer:
 
-    def __init__(self):
+    def __init__(self, delta_tags=0.1, delta_words=0.1, epsilon=0.2, p=0.5):
+        self.delta_tags = delta_tags
+        self.delta_words = delta_words
+        self.epsilon = epsilon
+        self.p = p
+
         # The bag of words for the style we want to replicate
         self.target_bow = {}
         self.target_entropy = 0
@@ -49,12 +54,15 @@ class EntropyTransfer:
         else:
             bow[key] = 1
 
-    # Parses a file and returns a dictionary of word counts
-    def learn_bow(self, filename, filetype=None):
+    # Takes a list of documents and returns a dictionary of word counts
+    def learn_bow(self, docs):
         bow = {}
-        for line in parse(filename, filetype):
-            local_bow = {}
-            tokens = self.tokenizer.tokenize(line)
+        for doc in docs:
+            doc_bow = {}
+            tokens = self.tokenizer.tokenize(doc)
+            # skip tweets like 'photo'
+            if len(tokens) <= 1:
+                continue
             token_tags = [("BEGIN", "BEGIN")] + nltk.pos_tag(tokens) + [("END", "END")]
             for (token, tag) in token_tags:
                 wn_tag = self.wn_tag(tag)
@@ -62,28 +70,31 @@ class EntropyTransfer:
                 if wn_tag in self.allowed_tags:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
-                self.update_bow(lemma, local_bow)
+                # update bag of words of just lemmas
+                self.update_bow(lemma, doc_bow)
+                # update bag of words of lemma.tag
                 self.update_bow(word, bow)
-
+                # update bag of words of (tag, lemma)
                 tag_word = (tag, lemma)
                 self.update_bow(tag_word, self.tag_word_counts)
-            self.bows.append(local_bow)
-            tags = list(map(lambda t: t[1], token_tags))
-            self.update_tag_bow(tags, 1, self.unigram_tag_counts)
-            self.update_tag_bow(tags, 2, self.bigram_tag_counts)
-            self.update_tag_bow(tags, 3, self.trigram_tag_counts)
+                # update unigram, bigram, and trigram tags
+                tags = list(map(lambda t: t[1], token_tags))
+                self.update_tag_bow(tags, 1, self.unigram_tag_counts)
+                self.update_tag_bow(tags, 2, self.bigram_tag_counts)
+                self.update_tag_bow(tags, 3, self.trigram_tag_counts)
+            self.bows.append(doc_bow)
 
         return bow
 
     # Parses a file and learns language models
-    def learn_target(self, filename, filetype=None):
-        self.target_bow = self.learn_bow(filename, filetype)
+    def learn_target(self, docs):
+        self.target_bow = self.learn_bow(docs)
         self.target_entropy = self.calc_avg_entropy(self.target_bow.keys())
-        self.word_lm = LanguageModel(1, self.target_bow, 0.3)
-        self.unigram_tag_lm = LanguageModel(1, self.unigram_tag_counts, 0.3)
-        self.bigram_tag_lm  = LanguageModel(2, self.bigram_tag_counts, 0.3, self.unigram_tag_lm)
-        self.trigram_tag_lm = LanguageModel(3, self.trigram_tag_counts, 0.3, self.bigram_tag_lm)
-        self.tag_word_lm = LanguageModel(2, self.tag_word_counts, 0.3, self.unigram_tag_lm)
+        self.word_lm = LanguageModel(1, self.target_bow, self.delta_words)
+        self.unigram_tag_lm = LanguageModel(1, self.unigram_tag_counts, self.delta_tags)
+        self.bigram_tag_lm  = LanguageModel(2, self.bigram_tag_counts, self.delta_tags, self.unigram_tag_lm)
+        self.trigram_tag_lm = LanguageModel(3, self.trigram_tag_counts, self.delta_tags, self.bigram_tag_lm)
+        self.tag_word_lm = LanguageModel(2, self.tag_word_counts, self.delta_words, self.unigram_tag_lm)
 
 
     # Converts nltk TreeBank POS tags to WordNet format
@@ -183,12 +194,11 @@ class EntropyTransfer:
     # Given a preprocessed word sequence, make substitutions to match the target entropy
     def transfer(self, word_sequence):
         target_entropy = self.calc_avg_entropy(self.target_bow.keys())
-        # TODO: tune epsillon
-        epsillon = 0.2
+
         new_sentence = []
         for word in word_sequence:
             word_entropy = self.calc_word_entropy(word)
-            if math.fabs(word_entropy - target_entropy) > epsillon:
+            if math.fabs(word_entropy - target_entropy) > self.epsilon:
                 # swap_word
                 new_word = self.swap_word(word)
                 new_sentence.append(new_word)
@@ -211,9 +221,11 @@ class EntropyTransfer:
 
         while len(tags) < max_length:
             new_tag = self.trigram_tag_lm.sample(tags)
-            if new_tag == "END" and len(tags) > min_length:
-                break
-            tags.append(new_tag)
+            if new_tag == "END":
+                if len(tags) > min_length:
+                    break
+            else:
+                tags.append(new_tag)
 
         # map the tags to a simpler, wordnet representation to allow more permissive matching
         wn_tags = list(map(lambda t: self.wn_tag(t), tags[1:]))
@@ -231,7 +243,7 @@ class EntropyTransfer:
                 # random chance to sample from target or ignore tag
                 # Don't sample nouns because that is highly tied to content
                 prob = random.random()
-                if tag != 'n' and prob < 0.5:
+                if tag != 'n' and prob < self.p:
                     word = self.tag_word_lm.sample([tag])  # sample from p(w|t)
                     words.append(word)
 

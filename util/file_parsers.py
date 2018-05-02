@@ -4,14 +4,14 @@ This module handles parsing of various file formats
 
 _allowable_types = ["tweets", "lyrics"]
 
-"""
-filename: the name of the file to open and parse
-filetype - optional: The type of the file, one of [_allowable_types]
-    If no filetype is specified, it will be treated as plain text
-bow_file - optional: the name of the bag of words file when parsing the mxm dataset
-artist_name - optional: the desired artist when parsing the mxm dataset
-"""
 def parse(filename, filetype=None, bow_file=None, artist_name=None):
+    """
+    filename: the name of the file to open and parse
+    filetype - optional: The type of the file, one of [_allowable_types]
+        If no filetype is specified, it will be treated as plain text
+    bow_file - optional: the name of the bag of words file when parsing the mxm dataset
+    artist_name - optional: the desired artist when parsing the mxm dataset
+    """
     if filetype is None:
         return parse_raw(filename)
     elif filetype not in _allowable_types:
@@ -37,13 +37,18 @@ def parse_tweets(filename):
             # TODO: remove urls
     return tweet_texts
 
-# For parsing text line by line
-def parse_raw(filename):
+# For parsing text line by line. Assumes empty line in a doc separator unless otherwise specified
+def parse_raw(filename, doc_separator='\n'):
     f = open(filename)
-    texts = []
+    docs = []
+    doc = ''
     for l in f:
-        texts.append(l)
-    return texts
+        if l == doc_separator:
+            docs.append(doc)
+            doc = ''
+        else:
+            docs.append(l)
+    return docs
 
 # For parsing mxm data https://labrosa.ee.columbia.edu/millionsong/musixmatch
 def parse_mxm(matches_file, bow_file, requested_artist):

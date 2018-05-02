@@ -1,8 +1,14 @@
 import nltk
 from nltk.corpus import wordnet as wn
 from entropy.entropy_transfer import EntropyTransfer
+from langauge_model.language_model import LanguageModel
 from topic_model.lda_model import LDAModel
 from evaluation.eval import calc_stats
+from util.file_parsers import parse
+from nltk.tokenize import TweetTokenizer
+from nltk.stem import WordNetLemmatizer
+import random
+import math
 
 
 class JointGenerator:
@@ -224,7 +230,7 @@ def term_wwl(word, topic):
     distances = [word_synset.path_similarity(wn.synset(term)) for term in topic]
     min_index = distances.index(min(distances))
     closest_term, min_distance = topic[min_index], distances[min_index]
-    return topic.word_likelihood(closest_term)/min_distance
+    return topic.word_likelihood(closest_term)/(min_distance + 1)
 
 def doc_wwl(doc, topic):
     likelihood = 1
@@ -259,25 +265,25 @@ def generate_joint(doc_length, language_model, topic_model):
     return gen_doc
 
 def main():
-    target_file = "../entropy/trumpTweets.csv"
+    target_file = "../data/trumpTweets.csv"
     filetype = "tweets"
-    test_file = "../entropy/test_file_right.txt"
-    
+    test_file = "../data/test_file_right.txt"
+    docs = parse(target_file, filetype)
+
     entropy_transfer = EntropyTransfer()
-    entropy_transfer.learn_target(target_file, filetype)
+    entropy_transfer.learn_target(docs)
     target_lm = entropy_transfer.word_lm
     
     target_tm = LDAModel(entropy_transfer.bows)
     lda = target_tm.lda_model
-    target_topics = lda.show_topics()
-    
+
     joint_results = []
     
-    test_file_stream = open(test_file)
-    for source_sentence in test_file_stream:
-        
-        modified_sentence = generate_joint(source_sentence)
-        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, source_sentence, modified_sentence)
+    test_docs = parse(test_file)
+    for doc in test_docs:
+        tokens = entropy_transfer.tokenizer.tokenize(doc)
+        modified_sentence = generate_joint(len(doc), target_lm, lda)
+        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
         print_sentence(modified_sentence)
         joint_results.append(modified_sentence)
 
