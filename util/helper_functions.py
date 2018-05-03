@@ -10,6 +10,8 @@ def cosine_similarity(vector1, vector2):
     for (val1, val2) in zip(vector1, vector2):
         score += val1[1] * val2[1]
     norm_factor = vector_length(vector1) * vector_length(vector2)
+    if norm_factor == 0:
+        return 0
     return score / norm_factor
 
 

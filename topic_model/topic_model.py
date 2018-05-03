@@ -40,10 +40,8 @@ class TopicModel:
         bow2 = self.dictionary.doc2bow(doc2.split(" "))
         topic_mixture2 = self.lsi_model[bow2]
 
-        print("original:")
-        self.print_top_topics(topic_mixture1, 3)
-        print("modified:")
-        self.print_top_topics(topic_mixture2, 3)
+        if len(topic_mixture1) == 0 or len(topic_mixture2) == 0:
+            return None
 
         return cosine_similarity(topic_mixture1, topic_mixture2)
 

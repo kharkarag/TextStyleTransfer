@@ -67,12 +67,13 @@ class EntropyTransfer:
             token_tags = [("BEGIN", "BEGIN")] + nltk.pos_tag(tokens) + [("END", "END")]
             words = ["BEGIN"]
             for (token, tag) in token_tags:
+                if token.startswith("http") or token.startswith("pic.twitter.com"):
+                    continue
                 wn_tag = self.wn_tag(tag)
                 lemma = self.lemmatizer.lemmatize(token)
                 if wn_tag in self.allowed_tags:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
-                # update bag of words of just lemmas
                 if not (lemma == "BEGIN" or lemma == "END"):
                     self.update_bow(word, doc_bow)
                     # update bag of words of lemma.tag
@@ -188,7 +189,7 @@ class EntropyTransfer:
 
     def preprocess(self, text_input):
         tokens = self.tokenizer.tokenize(text_input)
-        tokens = list(filter(lambda t: t != '.', tokens))
+        tokens = list(filter(lambda t: not t.startswith("http"), tokens))
         words = []
         tags = list(map(lambda t: t[1], nltk.pos_tag(tokens)))
         for (token, tag) in zip(tokens, tags):
