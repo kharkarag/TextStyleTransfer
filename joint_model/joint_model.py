@@ -233,6 +233,7 @@ def sample_linear(candidates, probs):
         prob -= probs[i]
         if prob <= 0:
             return word
+    return word
 
 def term_wwl(word, topic):
     
@@ -286,15 +287,15 @@ def print_sentence(word_sequence):
         print(lemma + ' ', end='')
     print()
 
-language_power = 3
+language_power = 1
 
-def generate_joint(doc_length, language_model, topic_model):
+def generate_joint(doc_length, language_model, topic_model, joint_model):
     
     # Generate new document
     gen_doc = []
     
     wwl_values = dict()
-    for _, word in language_model.bow:
+    for _, word in joint_model.bow:
         word_wwl = term_wwl(word, topic_model)
         wwl_values[word] = word_wwl
     
@@ -303,7 +304,11 @@ def generate_joint(doc_length, language_model, topic_model):
         # Greedily choose word with minimum joint distance
         word_distances = []
         words = []
-        for prev, word in language_model.bow:
+        words.clear()
+        word_distances.clear()
+        for _, word in joint_model.bow:
+            if word == "END.":
+                continue
             word_wwl = wwl_values[word]
             topic_distance = wwl * word_wwl
 #            language_likelihood = language_model.smooth_prob(word)
@@ -320,7 +325,6 @@ def generate_joint(doc_length, language_model, topic_model):
         word_distances = [tot_dist/len(word_distances) if d < 0 else d for d in word_distances]
         total_distance = sum(word_distances)
         word_probs = [d/total_distance for d in word_distances]
-        
         sampled_word = sample_linear(words, word_probs)
         
 #        best_word = word_distances.index(max(word_distances))
@@ -345,6 +349,11 @@ def main():
     entropy_transfer_content = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
     entropy_transfer_content.learn_target(content_docs[:4000])
     
+    entropy_transfer_joint = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
+    entropy_transfer_joint.learn_target(style_docs[:4000] + content_docs[:4000])
+    
+    joint_lm = entropy_transfer_joint.bigram_lm
+    
     print("Training LDA...")
 #    target_tm = TopicModel(entropy_transfer_content.bows)
 #    lsi = target_tm.lsi_model
@@ -358,9 +367,9 @@ def main():
     joint_results = []
     
 #    test_docs = parse(test_file)
-    for doc in content_docs[:10]:
+    for doc in content_docs[:20]:
 #        tokens = entropy_transfer_content.tokenizer.tokenize(doc)
-        modified_sentence = generate_joint(15, target_lm, target_tm)
+        modified_sentence = generate_joint(15, target_lm, target_tm, joint_lm)
         print_sentence(modified_sentence)
         print("----------")
         (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
