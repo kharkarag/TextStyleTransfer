@@ -65,15 +65,18 @@ class EntropyTransfer:
                 continue
             token_tags = [("BEGIN", "BEGIN")] + nltk.pos_tag(tokens) + [("END", "END")]
             for (token, tag) in token_tags:
+                if token.startswith("http") or token.startswith("pic.twitter.com"):
+                    continue
                 wn_tag = self.wn_tag(tag)
                 lemma = self.lemmatizer.lemmatize(token)
                 if wn_tag in self.allowed_tags:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
                 # update bag of words of just lemmas
-                self.update_bow(lemma, doc_bow)
-                # update bag of words of lemma.tag
-                self.update_bow(word, bow)
+                if tag != 'begin' and tag != 'end':
+                    self.update_bow(lemma, doc_bow)
+                    # update bag of words of lemma.tag
+                    self.update_bow(word, bow)
                 # update bag of words of (tag, lemma)
                 tag_word = (tag, lemma)
                 self.update_bow(tag_word, self.tag_word_counts)
@@ -154,7 +157,7 @@ class EntropyTransfer:
         return avg_entropy
 
     def swap_word(self, word):
-        (lemma, tag) = word.split('.')
+        (lemma, tag) = word.split('.', 1)
 
         synonyms = []
         if tag in self.allowed_tags:
@@ -175,7 +178,7 @@ class EntropyTransfer:
 
     def preprocess(self, text_input):
         tokens = self.tokenizer.tokenize(text_input)
-        tokens = list(filter(lambda t: t != '.', tokens))
+        tokens = list(filter(lambda t: not t.startswith("http"), tokens))
         words = []
         tags = list(map(lambda t: t[1], nltk.pos_tag(tokens)))
         for (token, tag) in zip(tokens, tags):

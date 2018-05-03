@@ -56,7 +56,7 @@ def parse_tweets2(filename):
         if len(tweet_data) > 5 and tweet_data[4] == "False":
             tweet_text = tweet_data[5]
             tweet_text.replace('.', '')
-            tweet_text = re.sub(r'^https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet_text)
             tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
 
             tweet_texts.append(tweet_text)

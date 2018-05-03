@@ -25,16 +25,38 @@ def calc_stats(language_model, topic_model, original_sentence, modified_sentence
     return per_word, similarity
 
 
+def average_stats(stats):
+    total_similarity = 0
+    total_ll = 0
+    total_inc_in_ll = 0
+    num_test = float(len(stats))
+    max_ll = float('-inf')
+    best_res = ''
+    for res in stats:
+        if res[3] > max_ll and len(res[1]) > 3:
+            max_ll = res[3]
+            best_res = (res[0], res[1])
+        total_similarity += res[4]
+        total_ll += res[3]
+        total_inc_in_ll += res[3] - res[2]
+
+    print(f'Best sentence was {best_res[0]} -> {best_res[1]} with ll {max_ll}')
+    average_similarity = total_similarity / num_test
+    average_ll = total_ll / num_test
+    average_inc_ll = total_inc_in_ll / num_test
+
+    return average_ll, average_inc_ll, average_similarity
+
+
 def main():
     target_file = "../data/trumpTweets.csv" #input("Enter a file to learn the style of: ")
     filetype = "tweets"  # input("Enter a format of the file <tweets, lyrics>. Leave blank for raw text: ")
-    test_file = "../data/test_file_right.txt" #input("Enter a file to transfer style to: ")
+    test_file = "../data/KimKardashianTweets.csv" #input("Enter a file to transfer style to: ")
 
     if len(filetype) == 0:
         filetype = None
 
     docs = parse(target_file, filetype)
-    test_docs = parse(test_file)
 
 
     # use best delta
@@ -50,52 +72,78 @@ def main():
     entropy_results = []
     sentence_structure_results = []
 
-    test_docs = parse(test_file)
+    test_docs = parse(test_file, "tweets2")[:200]
+
+    # learn topic model of source and target
+    # Used to compute topic similarities
+    entropy_transfer_source = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
+    entropy_transfer_source.learn_target(test_docs)
+    source_target_tm = TopicModel(entropy_transfer.bows + entropy_transfer_source.bows)
+
+    num_valid_sims = 0
     for doc in test_docs:
         sequence = entropy_transfer.preprocess(doc)
         original_log_likelihood = target_lm.log_prob(sequence)
+        if len(sequence) == 0:
+            continue
         per_word_ll = original_log_likelihood / float(len(sequence))
-
+        print(doc)
         print(f"Original Sentence - LogLikelihood:{per_word_ll}")
 
         # Entropy approach
         modified_sentence = entropy_transfer.transfer_input(doc)
-        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
-        print(f"Entropy approach - Loglikelihood:{log_likelihood} - TopicSimilarity:{similarity}")
-        entropy_transfer.print_sentence(modified_sentence)
-        entropy_results.append((doc, modified_sentence, per_word_ll, log_likelihood, similarity))
+        (log_likelihood, similarity) = calc_stats(target_lm, source_target_tm, doc, modified_sentence)
+        if similarity is not None:
+            print(f"Entropy approach - Loglikelihood:{log_likelihood} - TopicSimilarity:{similarity}")
+            entropy_transfer.print_sentence(modified_sentence)
+            entropy_results.append((doc, modified_sentence, per_word_ll, log_likelihood, similarity))
 
         # Sentence structure approach
         modified_sentence = entropy_transfer.transfer_by_pos(doc)
-        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
-        print(f"Sentence Structure approach - Loglikelihood:{log_likelihood} - TopicSimilarity:{similarity}")
-        entropy_transfer.print_sentence(modified_sentence)
-        sentence_structure_results.append((doc, modified_sentence, per_word_ll, log_likelihood, similarity))
+        (log_likelihood, similarity) = calc_stats(target_lm, source_target_tm, doc, modified_sentence)
+        if similarity is not None:
+            print(f"Sentence Structure approach - Loglikelihood:{log_likelihood} - TopicSimilarity:{similarity}")
+            entropy_transfer.print_sentence(modified_sentence)
+            sentence_structure_results.append((doc, modified_sentence, per_word_ll, log_likelihood, similarity))
 
-    # Plot
-    x = range(len(entropy_results))
-    baseline_ll = list(map(lambda res: res[2], entropy_results))
-    entropy_ll = list(map(lambda res: res[3], entropy_results))
-    pos_ll = list(map(lambda res: res[3], sentence_structure_results))
+        print()
 
-    entropy_topic_sim = list(map(lambda res: res[4], entropy_results))
-    pos_topic_sim = list(map(lambda res: res[4], sentence_structure_results))
+    # Joint model approach here.
+    # joint_results = ...
 
-    plt.plot(x, baseline_ll, label="Baseline Approach")
-    plt.plot(x, entropy_ll, label="Entropy Approach")
-    plt.plot(x, pos_ll, label="Sentence Structure Approach")
-    plt.legend()
-    plt.xlabel("Sentence number")
-    plt.ylabel("Per-word Log likelihood")
-    plt.xticks(x)
+    # Average results
+    average_ll_entropy, average_inc_ll_entropy, average_similarity_entropy = average_stats(entropy_results)
+    average_ll_pos, average_inc_ll_pos, average_similarity_pos = average_stats(sentence_structure_results)
+    # average_ll_joint, average_inc_ll_joint, average_similarity_joint = average_stats(joint_results)
+
+
+    # Plot Average per-word Log Likelihood
+    xaxis = ["Entropy", "POS Structure", "Joint Model"]
+    log_likelihood_y = [math.exp(average_ll_entropy), math.exp(average_ll_pos), 0]
+    bars = plt.bar(xaxis, log_likelihood_y)
+    bars[1].set_color('orange')
+    bars[2].set_color('green')
+    plt.ylabel("exp(Average per-word Log Likelihood)")
+    plt.xlabel("Approach")
     plt.show()
 
-    plt.plot(x, entropy_topic_sim, label="Entropy Approach")
-    plt.plot(x, pos_topic_sim, label="Sentence Structure Approach")
-    plt.legend()
-    plt.xlabel("Sentence number")
-    plt.ylabel("Topic Similarity")
-    plt.xticks(x)
+    # Plot Average Similarity
+    xaxis = ["Entropy", "POS Structure", "Joint Model"]
+    log_likelihood_y = [average_similarity_entropy, average_similarity_pos, 0]
+    bars = plt.bar(xaxis, log_likelihood_y)
+    bars[1].set_color('orange')
+    bars[2].set_color('green')
+    plt.ylabel("Average Topic Mixture Similarity")
+    plt.xlabel("Approach")
+    plt.show()
+
+    # Plot Average Increase in Log Likelihood
+    xaxis = ["Entropy", "POS Structure"]
+    log_likelihood_y = [average_inc_ll_entropy, average_inc_ll_pos]
+    bars = plt.bar(xaxis, log_likelihood_y)
+    bars[1].set_color('orange')
+    plt.ylabel("Average Change in Loglikelihood")
+    plt.xlabel("Approach")
     plt.show()
 
 
