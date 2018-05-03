@@ -25,7 +25,7 @@ class LDAModel:
         self.tfidf = models.TfidfModel(corpus)
         self.corpus_tfidf = self.tfidf[corpus]
         self.dictionary = dictionary
-        self.lda_model = models.LdaMulticore(corpus=self.corpus_tfidf, id2word=self.dictionary, num_topics=10, workers=3)
+        self.lda_model = models.LdaModel(corpus=self.corpus_tfidf, id2word=self.dictionary, num_topics=10)
 
     def doc_likelihood(self, doc):
         return self.lda_model[doc]

@@ -3,9 +3,11 @@ This module handles parsing of various file formats
 """
 
 import re
+import string
 
+_allowable_types = ["tweets", "lyrics", "tweets2", "tweets_alt", "tweets2_alt"]
 
-_allowable_types = ["tweets", "lyrics", "tweets2"]
+translator=str.maketrans('','',string.punctuation)
 
 def parse(filename, filetype=None, bow_file=None, artist_name=None):
     """
@@ -21,8 +23,12 @@ def parse(filename, filetype=None, bow_file=None, artist_name=None):
         print("Unsupported file type %s specified. Allowed types are %s".format(type, _allowable_types))
     elif filetype == "tweets":
         return parse_tweets(filename)
+    elif filetype == "tweets_alt":
+        return parse_tweets_alt(filename)
     elif filetype == "tweets2":
         return parse_tweets2(filename)
+    elif filetype == "tweets2_alt":
+        return parse_tweets2_alt(filename)
     elif filetype == "lyrics":
         if bow_file is None or artist_name is None:
             print("Bag of word file or artist name not specified but lyric parsing requested")
@@ -41,14 +47,31 @@ def parse_tweets(filename):
             # ignore retweets
             if tweet_text.startswith("RT"):
                 continue
+            tweet_text = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
             tweet_texts.append(tweet_text)
-            # TODO: remove urls
+    return tweet_texts
+
+def parse_tweets_alt(filename):
+    f = open(filename, encoding='UTF-8')
+    tweet_texts = []
+    for line in f:
+        tweet_data = line.split(',')
+        if len(tweet_data) > 3:
+            tweet_text = tweet_data[2]
+            # ignore retweets
+            if tweet_text.startswith("RT"):
+                continue
+            tweet_text = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
+            tweet_text = tweet_text.translate(translator)
+            tweet_texts.append(tweet_text)
     return tweet_texts
 
 # For parsing this csv format
 # https://www.kaggle.com/speckledpingu/RawTwitterFeeds/
 def parse_tweets2(filename):
-    f = open(filename)
+    f = open(filename, encoding='UTF-8')
     tweet_texts = []
     for line in f:
         tweet_data = line.split(',')
@@ -56,9 +79,24 @@ def parse_tweets2(filename):
         if len(tweet_data) > 5 and tweet_data[4] == "False":
             tweet_text = tweet_data[5]
             tweet_text.replace('.', '')
-            tweet_text = re.sub(r'^https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet_text)
             tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
 
+            tweet_texts.append(tweet_text)
+    return tweet_texts
+
+def parse_tweets2_alt(filename):
+    f = open(filename, encoding='UTF-8')
+    tweet_texts = []
+    for line in f:
+        tweet_data = line.split(',')
+        # if not a retweet
+        if len(tweet_data) > 5 and tweet_data[4] == "False":
+            tweet_text = tweet_data[5]
+            tweet_text.replace('.', '')
+            tweet_text = re.sub(r'https?:\/\/.*[\r\n]*', '', tweet_text)
+            tweet_text = re.sub(r'pic.twitter.com.*[\r\n]*', '', tweet_text)
+            tweet_text = tweet_text.translate(translator)
             tweet_texts.append(tweet_text)
     return tweet_texts
 

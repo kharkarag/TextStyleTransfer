@@ -1,10 +1,11 @@
 import nltk
 from nltk.corpus import wordnet as wn
+from nltk.corpus.reader.wordnet import WordNetError
 from entropy.entropy_transfer import EntropyTransfer
 from langauge_model.language_model import LanguageModel
 from topic_model.lda_model import LDAModel
 from topic_model.topic_model import TopicModel
-from eval import calc_stats
+from evaluation.eval import calc_stats
 from util.file_parsers import parse
 from nltk.tokenize import TweetTokenizer
 from nltk.stem import WordNetLemmatizer
@@ -225,75 +226,144 @@ class JointGenerator:
             print(lemma + ' ', end='')
         print()
 
+def sample_linear(candidates, probs):
+    prob = random.random()
+#    random.shuffle(candidates)
+    for i, word in enumerate(candidates):
+        prob -= probs[i]
+        if prob <= 0:
+            return word
 
 def term_wwl(word, topic):
-    word_synset = wn.synset(word + '.01')
-    distances = [word_synset.path_similarity(wn.synset(term + '.01')) for term in topic]
-    min_index = distances.index(min(distances))
-    closest_term, min_distance = topic[min_index], distances[min_index]
-    return topic.word_likelihood(closest_term)/(min_distance + 1)
+    
+    if word.split('.')[1] == '':
+        return -1
+    try:
+        word_synset = wn.synset(word + '.01')
+    except WordNetError:
+        return -1
+#    print(word_synset)
+    topic_id = random.randrange(topic.lda_model.num_topics)
+    topic_set = topic.lda_model.show_topic(topic_id)
+    
+#    print(topic_set)
+    
+    distances = []
+    topic_probs = []
+    for term, topic_prob in topic_set:
+        if term.split('.')[1] == '':
+            distances.append(-1)
+        else:
+            try:
+                sim = word_synset.path_similarity(wn.synset(term + '.01'))
+                if sim is None:
+                    distances.append(0)
+                else:
+                    distances.append(sim)
+            except WordNetError:
+                distances.append(-1)
+        topic_probs.append(topic_prob)
+    
+#    print(distances)
+    tot_dist = sum(list(filter(lambda d: d>=0, distances)))
+    distances = [tot_dist/len(distances) if d < 0 else d for d in distances]
+    
+#    distances = [word_synset.path_similarity(wn.synset(term[0] + '.01')) for term in topic_set]
+    max_index = distances.index(max(distances))
+    closest_term, max_prox = topic_set[max_index][0], distances[max_index]
+    return topic_probs[max_index]*(max_prox + 1)
 
-def doc_wwl(doc, topic):
+def doc_wwl(doc, topic_model):
     likelihood = 1
+#    bow = topic_model.lda_model[topic_model.dictionary.doc2bow(doc)]
     for word in doc:
-        likelihood *= term_wwl(word, topic)
+        likelihood *= term_wwl(word, topic_model)
     return likelihood
 
 def print_sentence(word_sequence):
-        for word in word_sequence:
-            lemma = word.split('.')[0]
-            print(lemma + ' ', end='')
-        print()
+    for word in word_sequence:
+        lemma = word.split('.')[0]
+        print(lemma + ' ', end='')
+    print()
+
+language_power = 3
 
 def generate_joint(doc_length, language_model, topic_model):
     
     # Generate new document
     gen_doc = []
+    
+    wwl_values = dict()
+    for _, word in language_model.bow:
+        word_wwl = term_wwl(word, topic_model)
+        wwl_values[word] = word_wwl
+    
+    wwl = 1
     for i in range(doc_length):
         # Greedily choose word with minimum joint distance
         word_distances = []
-        for word in language_model.bow:
-#            topic_distance = topic_model.likelihood(word)
-            new_doc = gen_doc + [word]
-            print(topic_model.lsi_model[topic_model.dictionary.doc2bow(new_doc)])
-            topic_distance = doc_wwl(new_doc, topic_model.lsi_model[topic_model.dictionary.doc2bow(new_doc)])
-            language_likelihood = language_model.smooth_prob(word)
+        words = []
+        for prev, word in language_model.bow:
+            word_wwl = wwl_values[word]
+            topic_distance = wwl * word_wwl
+#            language_likelihood = language_model.smooth_prob(word)
             # N-gram
-            # language_likelihood = language_model.smooth_prob([gen_doc[-1], word])
-            joint_dist = topic_distance*language_likelihood
+            if len(gen_doc) == 0:
+                language_likelihood = language_model.smooth_prob(("BEGIN", word))
+            else:
+                language_likelihood = language_model.smooth_prob((gen_doc[-1], word))
+            joint_dist = topic_distance*math.pow(language_likelihood, 1/language_power)
             word_distances.append(joint_dist)
-            best_word = min(word_distances)
-        gen_doc.append(best_word)
+            words.append(word)
+                
+        tot_dist = sum(list(filter(lambda d: d>=0, word_distances)))
+        word_distances = [tot_dist/len(word_distances) if d < 0 else d for d in word_distances]
+        total_distance = sum(word_distances)
+        word_probs = [d/total_distance for d in word_distances]
+        
+        sampled_word = sample_linear(words, word_probs)
+        
+#        best_word = word_distances.index(max(word_distances))
+        wwl *= wwl_values[sampled_word]
+        gen_doc.append(sampled_word)
         
     return gen_doc
 
 def main():
     target_file = "data/trumpTweets.csv"
-    filetype = "tweets"
-    test_file = "data/test_file_right.txt"
-    docs = parse(target_file, filetype)
+#    test_file = "data/test_file_right.txt"
+    test_file = "data/KimKardashianTweets.csv"
+    style_docs = parse(target_file, "tweets_alt")
+    
+    content_docs = parse(test_file, "tweets2_alt")
 
-    entropy_transfer = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
-    entropy_transfer.learn_target(docs[:4000])
-    target_lm = entropy_transfer.word_lm
+    entropy_transfer_style = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
+    entropy_transfer_style.learn_target(style_docs[:4000])
+#    target_lm = entropy_transfer_style.word_lm
+    target_lm = entropy_transfer_style.bigram_lm
     
-    print("Training LSI...")
-    target_tm = TopicModel(entropy_transfer.bows)
-    lsi = target_tm.lsi_model
-#    target_tm = LDAModel(entropy_transfer.bows)
-#    lda = target_tm.lda_model
-    print("LSI done")
+    entropy_transfer_content = EntropyTransfer(0.1, 0.1, 0.2, 0.5)
+    entropy_transfer_content.learn_target(content_docs[:4000])
     
-    print(lsi.show_topics())
+    print("Training LDA...")
+#    target_tm = TopicModel(entropy_transfer_content.bows)
+#    lsi = target_tm.lsi_model
+    target_tm = LDAModel(entropy_transfer_content.bows)
+    lda = target_tm.lda_model
+    print("LDA done")
+    
+#    print(lda.show_topics())
+    print("----------")
 
     joint_results = []
     
-    test_docs = parse(test_file)
-    for doc in test_docs:
-        tokens = entropy_transfer.tokenizer.tokenize(doc)
-        modified_sentence = generate_joint(len(doc), target_lm, target_tm)
-        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
+#    test_docs = parse(test_file)
+    for doc in content_docs[:10]:
+#        tokens = entropy_transfer_content.tokenizer.tokenize(doc)
+        modified_sentence = generate_joint(15, target_lm, target_tm)
         print_sentence(modified_sentence)
+        print("----------")
+        (log_likelihood, similarity) = calc_stats(target_lm, target_tm, doc, modified_sentence)
         joint_results.append(modified_sentence)
 
 

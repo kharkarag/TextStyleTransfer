@@ -24,6 +24,7 @@ class EntropyTransfer:
 
         # The bag of words for the style we want to replicate
         self.target_bow = {}
+        self.bigram_bow = {}
         self.target_entropy = 0
 
         # counts for the POS tags
@@ -64,6 +65,7 @@ class EntropyTransfer:
             if len(tokens) <= 1:
                 continue
             token_tags = [("BEGIN", "BEGIN")] + nltk.pos_tag(tokens) + [("END", "END")]
+            words = ["BEGIN"]
             for (token, tag) in token_tags:
                 wn_tag = self.wn_tag(tag)
                 lemma = self.lemmatizer.lemmatize(token)
@@ -72,18 +74,21 @@ class EntropyTransfer:
                 word = lemma + '.' + wn_tag
                 # update bag of words of just lemmas
                 if not (lemma == "BEGIN" or lemma == "END"):
-                    self.update_bow(lemma, doc_bow)
+                    self.update_bow(word, doc_bow)
                     # update bag of words of lemma.tag
                     self.update_bow(word, bow)
+                words.append(word)
                 # update bag of words of (tag, lemma)
                 tag_word = (tag, lemma)
                 self.update_bow(tag_word, self.tag_word_counts)
-                # update unigram, bigram, and trigram tags
-                tags = list(map(lambda t: t[1], token_tags))
-                self.update_tag_bow(tags, 1, self.unigram_tag_counts)
-                self.update_tag_bow(tags, 2, self.bigram_tag_counts)
-                self.update_tag_bow(tags, 3, self.trigram_tag_counts)
+            # update unigram, bigram, and trigram tags
+            tags = list(map(lambda t: t[1], token_tags))
+            self.update_tag_bow(tags, 1, self.unigram_tag_counts)
+            self.update_tag_bow(tags, 2, self.bigram_tag_counts)
+            self.update_tag_bow(tags, 3, self.trigram_tag_counts)
             self.bows.append(doc_bow)
+            
+            self.update_tag_bow(words, 2, self.bigram_bow)
 
         return bow
 
@@ -92,6 +97,7 @@ class EntropyTransfer:
         self.target_bow = self.learn_bow(docs)
         self.target_entropy = self.calc_avg_entropy(self.target_bow.keys())
         self.word_lm = LanguageModel(1, self.target_bow, self.delta_words)
+        self.bigram_lm = LanguageModel(2, self.bigram_bow, self.delta_words, self.word_lm)
         self.unigram_tag_lm = LanguageModel(1, self.unigram_tag_counts, self.delta_tags)
         self.bigram_tag_lm  = LanguageModel(2, self.bigram_tag_counts, self.delta_tags, self.unigram_tag_lm)
         self.trigram_tag_lm = LanguageModel(3, self.trigram_tag_counts, self.delta_tags, self.bigram_tag_lm)
@@ -104,11 +110,17 @@ class EntropyTransfer:
         # adjectives start with J in treebank
         if tag.startswith('J'):
             return 'a'
+        elif tag.startswith('V'):
+            return 'v'
+        elif tag.startswith('N'):
+            return 'n'
+        elif tag.startswith('R'):
+            return 'r'
         # the rest are just lowercase versions of the first letter
         elif tag[0].lower() in self.allowed_tags:
             return tag[0].lower()
         else:
-            return tag
+            return ''
 
     # Explores wordnet to find synonyms of a given lemma
     def get_synonyms(self, lemma, pos):
