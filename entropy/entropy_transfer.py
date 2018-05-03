@@ -72,8 +72,8 @@ class EntropyTransfer:
                 if wn_tag in self.allowed_tags:
                     lemma = self.lemmatizer.lemmatize(token, wn_tag)
                 word = lemma + '.' + wn_tag
-                # update bag of words of just lemmas
-                if tag != 'begin' and tag != 'end':
+                if not (lemma == "BEGIN" or lemma == "END"):
+                    # update bag of words of just lemmas
                     self.update_bow(lemma, doc_bow)
                     # update bag of words of lemma.tag
                     self.update_bow(word, bow)

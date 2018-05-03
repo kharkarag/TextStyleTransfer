@@ -11,6 +11,7 @@ from util.file_parsers import parse
 import matplotlib.pyplot as plt
 import math
 import nltk
+import numpy as np
 
 
 def lm_similarity(language_model, doc1, doc2):
@@ -49,9 +50,9 @@ def average_stats(stats):
 
 
 def main():
-    target_file = "../data/trumpTweets.csv" #input("Enter a file to learn the style of: ")
+    target_file = "data/trumpTweets.csv" #input("Enter a file to learn the style of: ")
     filetype = "tweets"  # input("Enter a format of the file <tweets, lyrics>. Leave blank for raw text: ")
-    test_file = "../data/KimKardashianTweets.csv" #input("Enter a file to transfer style to: ")
+    test_file = "data/test_file_right.txt" #input("Enter a file to transfer style to: ")
 
     if len(filetype) == 0:
         filetype = None
